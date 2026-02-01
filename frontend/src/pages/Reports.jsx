@@ -1,0 +1,476 @@
+import { useState } from 'react';
+import {
+    FileText,
+    Download,
+    Trash2,
+    X,
+    Clock,
+    Target,
+    Hash,
+    Activity,
+    Shield,
+    ChevronRight,
+    AlertCircle
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+const modeLabels = {
+    dictionary: 'Dictionary Analysis',
+    bruteforce: 'Brute Force',
+    policy: 'Single Crack Mode',
+};
+
+const riskConfig = {
+    high: { label: 'High Risk', class: 'badge-high', color: '#ef4444' },
+    medium: { label: 'Medium Risk', class: 'badge-medium', color: '#f59e0b' },
+    low: { label: 'Low Risk', class: 'badge-low', color: '#22c55e' },
+};
+
+export default function Reports() {
+    const { sessions, deleteSession } = useApp();
+    const [selectedSession, setSelectedSession] = useState(null);
+    const [showModal, setShowModal] = useState(false);
+
+    const formatDate = (isoString) => {
+        return new Date(isoString).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    const formatDuration = (seconds) => {
+        if (!seconds) return '—';
+        if (seconds < 60) return `${seconds.toFixed(1)}s`;
+        const mins = Math.floor(seconds / 60);
+        const secs = (seconds % 60).toFixed(0);
+        return `${mins}m ${secs}s`;
+    };
+
+    const openSessionDetail = (session) => {
+        setSelectedSession(session);
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setSelectedSession(null);
+    };
+
+    const exportPDF = (session) => {
+        const doc = new jsPDF();
+        const risk = riskConfig[session.risk_level] || riskConfig.low;
+
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, 210, 50, 'F');
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.setFont('helvetica', 'bold');
+        doc.text('JTR-AuditLab', 20, 25);
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Password Audit Report', 20, 35);
+
+        doc.setFontSize(10);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 45);
+
+        doc.setTextColor(50, 50, 50);
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Session Details', 20, 65);
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+
+        const sessionInfo = [
+            ['Session ID', session.session_id],
+            ['Dataset', session.dataset_name],
+            ['Attack Mode', modeLabels[session.mode] || session.mode],
+            ['Started', formatDate(session.started_at)],
+            ['Duration', formatDuration(session.duration)],
+        ];
+
+        doc.autoTable({
+            startY: 70,
+            head: [],
+            body: sessionInfo,
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 3 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 40 },
+                1: { cellWidth: 100 },
+            },
+        });
+
+        const currentY = doc.lastAutoTable.finalY + 15;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Risk Assessment', 20, currentY);
+
+        doc.setFillColor(...hexToRgb(risk.color));
+        doc.roundedRect(20, currentY + 5, 50, 15, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
+        doc.text(risk.label, 27, currentY + 14);
+
+        doc.setTextColor(50, 50, 50);
+
+        const statsY = currentY + 30;
+
+        doc.autoTable({
+            startY: statsY,
+            head: [['Metric', 'Value']],
+            body: [
+                ['Total Hashes', session.total_hashes?.toString() || '0'],
+                ['Cracked', session.cracked_count?.toString() || '0'],
+                ['Cracked Percentage', `${session.cracked_percent?.toFixed(1) || 0}%`],
+                ['Uncracked', ((session.total_hashes || 0) - (session.cracked_count || 0)).toString()],
+            ],
+            theme: 'striped',
+            styles: { fontSize: 10, cellPadding: 5 },
+            headStyles: { fillColor: [15, 23, 42] },
+        });
+
+        const recsY = doc.lastAutoTable.finalY + 15;
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Recommendations', 20, recsY);
+
+        const recommendations = getRecommendations(session);
+
+        doc.autoTable({
+            startY: recsY + 5,
+            head: [],
+            body: recommendations.map((rec, i) => [`${i + 1}. ${rec}`]),
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 3 },
+        });
+
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text('This report was generated by JTR-AuditLab - For educational and authorized use only.', 20, pageHeight - 15);
+        doc.text('Unauthorized use of password cracking tools is illegal and unethical.', 20, pageHeight - 10);
+
+        doc.save(`jtr-report-${session.session_id}.pdf`);
+    };
+
+    const getRecommendations = (session) => {
+        const recs = [];
+        const percent = session.cracked_percent || 0;
+
+        if (percent >= 50) {
+            recs.push('CRITICAL: Immediate password policy review required.');
+            recs.push('Enforce minimum password length of 12+ characters.');
+            recs.push('Require mixed character sets (uppercase, lowercase, numbers, symbols).');
+            recs.push('Implement password history to prevent reuse.');
+        } else if (percent >= 20) {
+            recs.push('Moderate risk detected. Consider strengthening password policies.');
+            recs.push('Educate users on creating strong, unique passwords.');
+            recs.push('Consider implementing multi-factor authentication.');
+        } else {
+            recs.push('Password strength is generally acceptable.');
+            recs.push('Continue monitoring and regular audits.');
+            recs.push('Consider implementing a password manager for the organization.');
+        }
+
+        recs.push('Use stronger hashing algorithms (bcrypt, Argon2) where possible.');
+        recs.push('Regularly audit password compliance across all systems.');
+
+        return recs;
+    };
+
+    const hexToRgb = (hex) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [
+            parseInt(result[1], 16),
+            parseInt(result[2], 16),
+            parseInt(result[3], 16)
+        ] : [0, 0, 0];
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                        <FileText className="w-7 h-7 text-cyber-cyan" />
+                        Audit Reports
+                    </h1>
+                    <p className="text-sm text-slate-400 mt-1">
+                        View and export historical audit sessions
+                    </p>
+                </div>
+
+                <div className="text-sm text-slate-400">
+                    {sessions.length} session{sessions.length !== 1 ? 's' : ''} recorded
+                </div>
+            </div>
+
+            {sessions.length > 0 ? (
+                <div className="glass-card overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-cyber-cyan/10">
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Session ID
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Dataset
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Mode
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Started
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Duration
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Risk
+                                    </th>
+                                    <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Cracked
+                                    </th>
+                                    <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider px-6 py-4">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-cyber-cyan/5">
+                                {sessions.map((session) => {
+                                    const risk = riskConfig[session.risk_level] || riskConfig.low;
+
+                                    return (
+                                        <tr
+                                            key={session.session_id}
+                                            className="hover:bg-cyber-cyan/5 transition-colors cursor-pointer"
+                                            onClick={() => openSessionDetail(session)}
+                                        >
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm font-mono text-cyber-cyan">
+                                                    {session.session_id}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm text-white truncate max-w-[200px] block">
+                                                    {session.dataset_name}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm text-slate-300">
+                                                    {modeLabels[session.mode] || session.mode}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm text-slate-400">
+                                                    {formatDate(session.started_at)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm text-slate-400">
+                                                    {formatDuration(session.duration)}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded text-xs font-medium ${risk.class}`}>
+                                                    {risk.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-sm text-white">
+                                                    {session.cracked_percent?.toFixed(1) || 0}%
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            exportPDF(session);
+                                                        }}
+                                                        className="p-2 rounded-lg hover:bg-cyber-cyan/10 text-slate-400 hover:text-cyber-cyan transition-colors"
+                                                        title="Export PDF"
+                                                    >
+                                                        <Download className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            deleteSession(session.session_id);
+                                                        }}
+                                                        className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                    <ChevronRight className="w-4 h-4 text-slate-600" />
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            ) : (
+                <div className="glass-card p-12 text-center">
+                    <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">No Reports Yet</h3>
+                    <p className="text-sm text-slate-400 max-w-md mx-auto">
+                        Run your first password audit from the Dashboard to generate reports.
+                        All completed sessions will appear here.
+                    </p>
+                </div>
+            )}
+
+            {showModal && selectedSession && (
+                <div className="modal-overlay" onClick={closeModal}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-cyber-cyan/10">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">Session Details</h2>
+                                    <p className="text-sm text-slate-400 mt-1 font-mono">
+                                        ID: {selectedSession.session_id}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={closeModal}
+                                    className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 space-y-6">
+                            {/* Risk Badge */}
+                            <div className="flex items-center gap-4">
+                                <div className={`px-4 py-2 rounded-lg text-sm font-medium ${riskConfig[selectedSession.risk_level]?.class || 'badge-low'}`}>
+                                    {riskConfig[selectedSession.risk_level]?.label || 'Low Risk'}
+                                </div>
+                                <span className="text-2xl font-bold text-white">
+                                    {selectedSession.cracked_percent?.toFixed(1) || 0}% Cracked
+                                </span>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 rounded-lg bg-cyber-dark/50 border border-cyber-cyan/10">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Hash className="w-4 h-4 text-cyber-cyan" />
+                                        <span className="text-xs text-slate-400">Total Hashes</span>
+                                    </div>
+                                    <p className="text-xl font-bold text-white">{selectedSession.total_hashes || 0}</p>
+                                </div>
+                                <div className="p-4 rounded-lg bg-cyber-dark/50 border border-cyber-cyan/10">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Target className="w-4 h-4 text-green-400" />
+                                        <span className="text-xs text-slate-400">Cracked</span>
+                                    </div>
+                                    <p className="text-xl font-bold text-white">{selectedSession.cracked_count || 0}</p>
+                                </div>
+                                <div className="p-4 rounded-lg bg-cyber-dark/50 border border-cyber-cyan/10">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Clock className="w-4 h-4 text-amber-400" />
+                                        <span className="text-xs text-slate-400">Duration</span>
+                                    </div>
+                                    <p className="text-xl font-bold text-white">{formatDuration(selectedSession.duration)}</p>
+                                </div>
+                                <div className="p-4 rounded-lg bg-cyber-dark/50 border border-cyber-cyan/10">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Activity className="w-4 h-4 text-cyber-magenta" />
+                                        <span className="text-xs text-slate-400">Mode</span>
+                                    </div>
+                                    <p className="text-xl font-bold text-white">{modeLabels[selectedSession.mode] || selectedSession.mode}</p>
+                                </div>
+                            </div>
+
+                            {/* Visual Chart */}
+                            <div>
+                                <h4 className="text-sm font-medium text-slate-300 mb-3">Password Strength Distribution</h4>
+                                <div className="h-8 rounded-lg overflow-hidden flex">
+                                    <div
+                                        className="bg-red-500 transition-all duration-500"
+                                        style={{ width: `${selectedSession.cracked_percent || 0}%` }}
+                                        title={`Weak: ${selectedSession.cracked_percent?.toFixed(1) || 0}%`}
+                                    />
+                                    <div
+                                        className="bg-green-500 transition-all duration-500"
+                                        style={{ width: `${100 - (selectedSession.cracked_percent || 0)}%` }}
+                                        title={`Strong: ${(100 - (selectedSession.cracked_percent || 0)).toFixed(1)}%`}
+                                    />
+                                </div>
+                                <div className="flex justify-between text-xs text-slate-400 mt-2">
+                                    <span className="flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded bg-red-500" />
+                                        Cracked ({selectedSession.cracked_percent?.toFixed(1) || 0}%)
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <span className="w-2 h-2 rounded bg-green-500" />
+                                        Uncracked ({(100 - (selectedSession.cracked_percent || 0)).toFixed(1)}%)
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Info */}
+                            <div className="p-4 rounded-lg bg-cyber-dark/50 border border-cyber-cyan/10">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-slate-400">Dataset:</span>
+                                        <p className="text-white mt-0.5 truncate">{selectedSession.dataset_name}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-400">Started:</span>
+                                        <p className="text-white mt-0.5">{formatDate(selectedSession.started_at)}</p>
+                                    </div>
+                                </div>
+                                {selectedSession.notes && (
+                                    <div className="mt-4 pt-4 border-t border-cyber-cyan/10">
+                                        <span className="text-slate-400 text-sm">Notes:</span>
+                                        <p className="text-white mt-0.5 text-sm">{selectedSession.notes}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-6 border-t border-cyber-cyan/10 flex justify-end gap-3">
+                            <button
+                                onClick={closeModal}
+                                className="btn-secondary"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => {
+                                    exportPDF(selectedSession);
+                                    closeModal();
+                                }}
+                                className="btn-primary flex items-center gap-2"
+                            >
+                                <Download className="w-4 h-4" />
+                                Export PDF Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

@@ -1,0 +1,19 @@
+# Sample Password Hashes for Testing
+# This file contains sample MD5 hashes for educational purposes
+# Format: username:hash
+
+user1:5f4dcc3b5aa765d61d8327deb882cf99
+user2:e10adc3949ba59abbe56e057f20f883e
+user3:d8578edf8458ce06fbc5bb76a58c5ca4
+user4:25f9e794323b453885f5181f1b624d0b
+user5:827ccb0eea8a706c4c34a16891f84e7b
+user6:e99a18c428cb38d5f260853678922e03
+user7:098f6bcd4621d373cade4e832627b4f6
+user8:5d41402abc4b2a76b9719d911017c592
+user9:7c6a180b36896a65c3ed8c8a2bffcfb4
+user10:6cb75f652a9b52798eb6cf2201057c73
+admin:21232f297a57a5a743894a0e4a801fc3
+root:63a9f0ea7bb98050796b649e85481845
+test:098f6bcd4621d373cade4e832627b4f6
+demo:fe01ce2a7fbac8fafaed7c982a04e229
+guest:084e0343a0486ff05530df6c705c8bb4
