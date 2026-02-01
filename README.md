@@ -60,13 +60,10 @@ JTR-AuditLab/
 ## Backend Setup
 
 1. Navigate to the backend directory:
-   ```bash
-   cd backend
-````
 
+   cd backend
 2. Create and activate a virtual environment:
 
-   ```bash
    python -m venv venv
 
    # Windows
@@ -74,7 +71,6 @@ JTR-AuditLab/
 
    # Linux / macOS
    source venv/bin/activate
-   ```
 
 3. Install required dependencies:
 
