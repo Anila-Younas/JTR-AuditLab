@@ -61,8 +61,9 @@ JTR-AuditLab/
 
 1. Navigate to the backend directory:
 
+   ```bash
    cd backend
-
+   ```
 
 2. Create and activate a virtual environment:
 
